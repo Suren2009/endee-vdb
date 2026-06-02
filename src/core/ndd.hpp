@@ -230,8 +230,10 @@ private:
     std::thread autosave_thread_;
     std::atomic<bool> running_{true};
     BackupStore backup_store_;
+#ifndef NDD_DISABLE_BACKUP
     void executeBackupJob(const std::string& index_id, const std::string& backup_name,
                           std::stop_token st);
+#endif
 
     std::unique_ptr<WriteAheadLog> createWAL(const std::string& index_id) {
         const std::string wal_dir = data_dir_ + "/" + index_id;

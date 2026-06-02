@@ -235,6 +235,9 @@ endif()
 
 # Find MDBX (replaces LMDB)
 find_path(LMDB_INCLUDE_DIR NAMES mdbx.h PATHS ${CMAKE_SOURCE_DIR}/third_party/mdbx NO_DEFAULT_PATH)
+if(NOT LMDB_INCLUDE_DIR AND EXISTS "${CMAKE_SOURCE_DIR}/third_party/mdbx/mdbx.h")
+    set(LMDB_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/mdbx")
+endif()
 file(GLOB LMDB_SOURCES ${CMAKE_SOURCE_DIR}/third_party/mdbx/*.c)
 
 # Add new src/*.cpp files here when they should be compiled into ndd.
@@ -276,6 +279,7 @@ if(NDD_BUILD_ANDROID_JNI)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/storage
         ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/msgpack/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/roaring
         ${LMDB_INCLUDE_DIR}
         ${JNI_INCLUDE_DIRS}
