@@ -1,4 +1,5 @@
 package io.endee.ndd;
+import android.util.Log;
 
 /**
  * Thin Java wrapper around the Endee native vector database.
@@ -36,6 +37,7 @@ public final class EndeeNative implements AutoCloseable {
             int efConstruction,
             int checksum,
             String sparseModel) {
+        Log.d("EndeeNative", "createIndex: " + indexName + " " + dimension + " " + spaceType + " " + precision + " " + maxElements + " " + m + " " + efConstruction + " " + checksum + " " + sparseModel);
         return createIndex(
                 requireHandle(),
                 indexName,
