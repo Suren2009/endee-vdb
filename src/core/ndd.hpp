@@ -1,5 +1,7 @@
 #pragma once
+#ifndef NDD_DISABLE_BACKUP
 #include <curl/curl.h>
+#endif
 #include <regex>
 
 #include "hnsw/hnswlib.h"
@@ -196,7 +198,15 @@ struct PersistenceConfig {
     bool save_on_shutdown{true};
 };
 
+#ifndef NDD_DISABLE_BACKUP
 #include "../storage/backup_store.hpp"
+#else
+class BackupStore {
+public:
+    explicit BackupStore(const std::string&) {}
+    void joinAllThreads() {}
+};
+#endif
 
 class IndexManager {
 private:
@@ -220,8 +230,10 @@ private:
     std::thread autosave_thread_;
     std::atomic<bool> running_{true};
     BackupStore backup_store_;
+#ifndef NDD_DISABLE_BACKUP
     void executeBackupJob(const std::string& index_id, const std::string& backup_name,
                           std::stop_token st);
+#endif
 
     std::unique_ptr<WriteAheadLog> createWAL(const std::string& index_id) {
         const std::string wal_dir = data_dir_ + "/" + index_id;
@@ -1892,6 +1904,7 @@ public:
         // and will call save at appropriate time
     }
 
+#ifndef NDD_DISABLE_BACKUP
     // ========== Backup operations ==========
 
     // Orchestration methods (defined below after class)
@@ -1928,8 +1941,10 @@ public:
     std::pair<bool, std::string> uploadBackup(const std::string& backup_name,
                                                 const std::string& username,
                                                 const std::string& file_content);
+#endif
 };
 
+#ifndef NDD_DISABLE_BACKUP
 // ========== IndexManager backup implementations ==========
 
 inline void IndexManager::executeBackupJob(const std::string& index_id, const std::string& backup_name,
@@ -2281,3 +2296,4 @@ inline std::pair<bool, std::string> IndexManager::uploadBackup(const std::string
 
     return {true, "Backup uploaded successfully"};
 }
+#endif

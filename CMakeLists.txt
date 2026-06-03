@@ -2,55 +2,62 @@
 cmake_minimum_required(VERSION 3.14)
 project(ndd)
 
+option(NDD_BUILD_ANDROID_JNI "Build the Android JNI shared library target" OFF)
 
 #check for the correct clang version
-find_program(CLANG_CANDIDATE_C
-    NAMES clang-21 clang-20 clang-19 clang
-)
-
-find_program(CLANG_CANDIDATE_CXX
-    NAMES clang++-21 clang++-20 clang++-19 clang++
-)
-
-if (NOT CLANG_CANDIDATE_C OR NOT CLANG_CANDIDATE_CXX)
-    message(FATAL_ERROR "Clang not found. Please install clang >= 19.")
-endif()
-
-# Query clang version
-execute_process(
-    COMMAND ${CLANG_CANDIDATE_C} --version
-    OUTPUT_VARIABLE CLANG_VERSION_OUTPUT
-    ERROR_VARIABLE CLANG_VERSION_ERROR
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-if (NOT CLANG_VERSION_OUTPUT)
-    message(FATAL_ERROR "Failed to query clang version.")
-endif()
-
-# Extract major version
-string(REGEX MATCH "clang version ([0-9]+)" _match "${CLANG_VERSION_OUTPUT}")
-set(CLANG_VERSION_MAJOR "${CMAKE_MATCH_1}")
-
-if (NOT CLANG_VERSION_MAJOR)
-    message(FATAL_ERROR
-        "Unable to determine clang version from:\n${CLANG_VERSION_OUTPUT}\n"
+if(NOT NDD_BUILD_ANDROID_JNI)
+    find_program(CLANG_CANDIDATE_C
+        NAMES clang-21 clang-20 clang-19 clang
     )
-endif()
 
-if (CLANG_VERSION_MAJOR LESS 17)
-    message(FATAL_ERROR
-        "Clang ${CLANG_VERSION_MAJOR} detected, but clang >= 17 is required "
+    find_program(CLANG_CANDIDATE_CXX
+        NAMES clang++-21 clang++-20 clang++-19 clang++
     )
+
+    if (NOT CLANG_CANDIDATE_C OR NOT CLANG_CANDIDATE_CXX)
+        message(FATAL_ERROR "Clang not found. Please install clang >= 19.")
+    endif()
+
+    # Query clang version
+    execute_process(
+        COMMAND ${CLANG_CANDIDATE_C} --version
+        OUTPUT_VARIABLE CLANG_VERSION_OUTPUT
+        ERROR_VARIABLE CLANG_VERSION_ERROR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    if (NOT CLANG_VERSION_OUTPUT)
+        message(FATAL_ERROR "Failed to query clang version.")
+    endif()
+
+    # Extract major version
+    string(REGEX MATCH "clang version ([0-9]+)" _match "${CLANG_VERSION_OUTPUT}")
+    set(CLANG_VERSION_MAJOR "${CMAKE_MATCH_1}")
+
+    if (NOT CLANG_VERSION_MAJOR)
+        message(FATAL_ERROR
+            "Unable to determine clang version from:\n${CLANG_VERSION_OUTPUT}\n"
+        )
+    endif()
+
+    if (CLANG_VERSION_MAJOR LESS 17)
+        message(FATAL_ERROR
+            "Clang ${CLANG_VERSION_MAJOR} detected, but clang >= 17 is required "
+        )
+    endif()
+
+    # Lock compilers
+    set(CMAKE_C_COMPILER   "${CLANG_CANDIDATE_C}"   CACHE STRING "" FORCE)
+    set(CMAKE_CXX_COMPILER "${CLANG_CANDIDATE_CXX}" CACHE STRING "" FORCE)
+
+    message(STATUS "Using Clang ${CLANG_VERSION_MAJOR}")
+    message(STATUS "C compiler : ${CMAKE_C_COMPILER}")
+    message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
+else()
+    message(STATUS "Android JNI build enabled")
+    message(STATUS "C compiler : ${CMAKE_C_COMPILER}")
+    message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
 endif()
-
-# Lock compilers
-set(CMAKE_C_COMPILER   "${CLANG_CANDIDATE_C}"   CACHE STRING "" FORCE)
-set(CMAKE_CXX_COMPILER "${CLANG_CANDIDATE_CXX}" CACHE STRING "" FORCE)
-
-message(STATUS "Using Clang ${CLANG_VERSION_MAJOR}")
-message(STATUS "C compiler : ${CMAKE_C_COMPILER}")
-message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
 
 
 
@@ -118,6 +125,7 @@ endif()
 # Include FetchContent for dependencies
 include(FetchContent)
 
+if(NOT NDD_BUILD_ANDROID_JNI)
 # =======================
 # Find OpenSSL
 # =======================
@@ -223,10 +231,97 @@ endif()
 # Find Other Dependencies
 # =======================
 find_package(Threads REQUIRED)
+endif()
 
 # Find MDBX (replaces LMDB)
 find_path(LMDB_INCLUDE_DIR NAMES mdbx.h PATHS ${CMAKE_SOURCE_DIR}/third_party/mdbx NO_DEFAULT_PATH)
+if(NOT LMDB_INCLUDE_DIR AND EXISTS "${CMAKE_SOURCE_DIR}/third_party/mdbx/mdbx.h")
+    set(LMDB_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/mdbx")
+endif()
 file(GLOB LMDB_SOURCES ${CMAKE_SOURCE_DIR}/third_party/mdbx/*.c)
+
+# Add new src/*.cpp files here when they should be compiled into ndd.
+set(NDD_CORE_SOURCES
+    src/sparse/inverted_index.cpp
+    src/utils/system_sanity/system_sanity.cpp
+)
+
+if(NDD_BUILD_ANDROID_JNI)
+    if(NOT ANDROID)
+        find_package(JNI REQUIRED)
+    endif()
+
+    add_library(endee_jni SHARED
+        src/jni/endee_jni.cpp
+        ${NDD_CORE_SOURCES}
+        ${LMDB_SOURCES}
+        third_party/roaring_bitmap/roaring.c
+    )
+
+    set_target_properties(endee_jni PROPERTIES
+        OUTPUT_NAME "endee"
+    )
+
+    if(ANDROID_ABI)
+        set_target_properties(endee_jni PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${ANDROID_ABI}"
+        )
+    endif()
+
+    set_source_files_properties(${LMDB_SOURCES} PROPERTIES
+        COMPILE_FLAGS "-DMDBX_BUILD_SHARED_LIBRARY=0 -DMDBX_BUILD_FLAGS=\\\"NDD_EMBEDDED\\\""
+    )
+
+    target_include_directories(endee_jni PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/server
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/storage
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/msgpack/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/roaring
+        ${LMDB_INCLUDE_DIR}
+        ${JNI_INCLUDE_DIRS}
+    )
+
+    target_compile_definitions(endee_jni PRIVATE
+        MDB_MAXKEYSIZE=512
+        NDD_DISABLE_BACKUP
+    )
+
+    if(NOT DEBUG)
+        target_compile_options(endee_jni PRIVATE -O3 -ffast-math -fno-finite-math-only)
+    endif()
+
+    if(USE_SVE2)
+        message(STATUS "SIMD: SVE2 enabled (ARMv8.6-a + SVE2 + FP16 + DotProd)")
+        target_compile_options(endee_jni PRIVATE -march=armv8.6-a+sve2+fp16+dotprod)
+        target_compile_definitions(endee_jni PRIVATE USE_SVE2)
+    elseif(USE_NEON)
+        message(STATUS "SIMD: NEON enabled")
+        target_compile_options(endee_jni PRIVATE -march=armv8.2-a+fp16+fp16fml+dotprod)
+        target_compile_definitions(endee_jni PRIVATE USE_NEON)
+    elseif(USE_AVX512)
+        message(STATUS "SIMD: AVX512 enabled (F, BW, VNNI, FP16)")
+        target_compile_options(endee_jni PRIVATE -mavx512f -mavx512bw -mavx512vnni -mavx512fp16 -mavx512vpopcntdq)
+        target_compile_definitions(endee_jni PRIVATE USE_AVX512)
+    elseif(USE_AVX2)
+        message(STATUS "SIMD: AVX2 enabled")
+        target_compile_options(endee_jni PRIVATE -mavx2 -mfma -mf16c)
+        target_compile_definitions(endee_jni PRIVATE USE_AVX2)
+    endif()
+
+    if(NDD_INV_IDX_STORE_FLOATS)
+        target_compile_definitions(endee_jni PRIVATE NDD_INV_IDX_STORE_FLOATS)
+    endif()
+
+    install(TARGETS endee_jni LIBRARY DESTINATION lib)
+
+    message(STATUS "Processor: ${CMAKE_SYSTEM_PROCESSOR}")
+    message(STATUS "LMDB include dir: ${LMDB_INCLUDE_DIR}")
+    return()
+endif()
 
 # -----------------------
 # Derive binary name
@@ -249,12 +344,6 @@ elseif(USE_NEON)
 endif()
 
 message(STATUS "Binary name: ${NDD_BINARY_NAME}")
-
-# Add new src/*.cpp files here when they should be compiled into ndd.
-set(NDD_CORE_SOURCES
-    src/sparse/inverted_index.cpp
-    src/utils/system_sanity/system_sanity.cpp
-)
 
 # Build non-main project sources separately so they can be compiled in parallel
 # and linked into the final executable at the end.
