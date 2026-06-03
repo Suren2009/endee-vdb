@@ -37,4 +37,3 @@ android/.gradle/
 android/**/build/
 android/library/.cxx/
 android/dist/
-android/release/*.aar
