@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "hnsw/vector_cache.h"
+#include "hnsw/hnswalg.h"
 
 TEST(VectorCacheSizingTest, SmallIndexDoesNotForceMinimumCacheBits) {
     const size_t bits = hnswlib::VectorCache::calculateCacheBits(100'000, 50);
