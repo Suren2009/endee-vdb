@@ -120,8 +120,8 @@ class EndeeExample(private val context: Context) {
             for (i in 0 until hits.length()) {
                 val hit = hits.getJSONObject(i)
                 val id = hit.getString("id")
-                val score = hit.getDouble("score")
-                Log.d("Endee", "hit id=$id score=$score")
+                val score = hit.getDouble("similarity")
+                Log.d("Endee", "hit id=$id similarity=$score")
             }
 
             // Index metadata
@@ -188,7 +188,7 @@ public final class EndeeExample {
             JSONArray hits = new JSONArray(resultsJson);
             for (int i = 0; i < hits.length(); i++) {
                 JSONObject hit = hits.getJSONObject(i);
-                Log.d("Endee", "hit id=" + hit.getString("id") + " score=" + hit.getDouble("score"));
+                Log.d("Endee", "hit id=" + hit.getString("id") + " similarity=" + hit.getDouble("similarity"));
             }
         }
     }

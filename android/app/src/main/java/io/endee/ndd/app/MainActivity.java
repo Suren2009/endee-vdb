@@ -136,7 +136,7 @@ public class MainActivity extends Activity {
                         for (int i = 0; i < hits.length(); i++) {
                             JSONObject hit = hits.getJSONObject(i);
                             String id = hit.getString("id");
-                            double score = hit.getDouble("score");
+                            double score = hit.getDouble("similarity");
                             log("  -> Hit #" + (i + 1) + ": Doc ID = '" + id + "', Similarity = " + String.format("%.6f", score));
                         }
 
