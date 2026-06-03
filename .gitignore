@@ -30,3 +30,11 @@ frontend/*
 
 # DS Store
 .DS_Store
+
+# Android library build
+android/local.properties
+android/.gradle/
+android/**/build/
+android/library/.cxx/
+android/dist/
+android/release/*.aar
