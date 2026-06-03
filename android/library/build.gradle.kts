@@ -26,6 +26,7 @@ android {
                 arguments += listOf(
                     "-DNDD_BUILD_ANDROID_JNI=ON",
                     "-DUSE_NEON=ON",
+                    "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384",
                 )
                 cppFlags += listOf("-std=c++20")
             }
