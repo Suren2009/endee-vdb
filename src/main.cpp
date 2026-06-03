@@ -1,6 +1,10 @@
 // System includes
+#include <algorithm>
+#include <cctype>
 #include <iostream>
 #include <filesystem>
+#include <limits>
+#include <new>
 
 // ASIO/Crow related
 #include "crow/query_string.h"
@@ -87,6 +91,32 @@ struct AuthMiddleware : crow::ILocalMiddleware {
 inline crow::response json_error(int code, const std::string& message) {
     crow::json::wvalue err_json({{"error", message}});
     return crow::response(code, err_json.dump());
+}
+
+inline bool is_allocation_failure_message(const std::string& message) {
+    std::string lower = message;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+
+    return lower.find("allocate") != std::string::npos
+           || lower.find("not enough memory") != std::string::npos
+           || lower.find("out of memory") != std::string::npos
+           || lower.find("outofmemory") != std::string::npos
+           || lower.find("bad_alloc") != std::string::npos;
+}
+
+inline crow::response create_index_allocation_error(const std::string& username,
+                                                    const std::string& index_name,
+                                                    const std::string& path,
+                                                    const std::string& detail) {
+    const std::string message =
+            "Insufficient memory to create index. Reduce max_elements (or "
+            "size_in_millions), dimension, M, or vector cache settings. Details: "
+            + detail;
+    LOG_ERROR(1066, username, index_name, "Create-index allocation failure on "
+                                         << path << ": " << detail);
+    return json_error(507, message);
 }
 // Special helper function to log and send error messages in JSON format for 500 errors
 inline crow::response json_error_500(const std::string& username,
@@ -397,6 +427,31 @@ int main(int argc, char** argv) {
                     return json_error(400, "Invalid precision. Must be one of: " + names_str);
                 }
 
+                if(body.has("max_elements") && body.has("size_in_millions")) {
+                    LOG_WARN(1017,
+                             index_id,
+                             "Create-index request provided both max_elements and "
+                             "size_in_millions");
+                    return json_error(
+                            400,
+                            "Specify only one of max_elements or size_in_millions");
+                }
+
+                size_t max_elements = settings::MAX_ELEMENTS;
+                if(body.has("max_elements")) {
+                    const auto requested_max_elements = body["max_elements"].i();
+                    if(requested_max_elements <= 0) {
+                        LOG_WARN(1017,
+                                 index_id,
+                                 "Invalid max_elements: " << requested_max_elements);
+                        return json_error(400, "max_elements must be greater than 0");
+                    }
+                    max_elements = static_cast<size_t>(requested_max_elements);
+                    LOG_INFO(1018,
+                             index_id,
+                             "Creating index with max_elements: " << max_elements);
+                }
+
                 // Get custom size in millions (optional)
                 size_t size_in_millions = 0;
                 if(body.has("size_in_millions")) {
@@ -407,6 +462,15 @@ int main(int argc, char** argv) {
                                        "Invalid custom size_in_millions: " << size_in_millions);
                         return json_error(400, "size_in_millions must be between 1 and 10000");
                     }
+                    if(size_in_millions
+                       > std::numeric_limits<size_t>::max() / 1'000'000ULL) {
+                        LOG_WARN(1017,
+                                 index_id,
+                                 "size_in_millions overflows max_elements: "
+                                         << size_in_millions);
+                        return json_error(400, "size_in_millions is too large");
+                    }
+                    max_elements = size_in_millions * 1'000'000ULL;
                     LOG_INFO(1018, index_id, "Creating index with custom size: " << size_in_millions << "M vectors");
                 }
 
@@ -432,7 +496,7 @@ int main(int argc, char** argv) {
 
                 IndexConfig config{dim,
                                    *sparse_model,
-                                   settings::MAX_ELEMENTS,  // max elements
+                                   max_elements,
                                    body["space_type"].s(),
                                    m,
                                    ef_con,
@@ -444,8 +508,15 @@ int main(int argc, char** argv) {
                     index_manager.createIndex(index_id, config, UserType::Admin, size_in_millions);
                     return crow::response(200, "Index created successfully");
                 } catch(const std::runtime_error& e) {
+                    if(is_allocation_failure_message(e.what())) {
+                        return create_index_allocation_error(
+                                ctx.username, body["index_name"].s(), req.url, e.what());
+                    }
                     LOG_WARN(1026, index_id, "Create-index request failed: " << e.what());
                     return json_error(409, e.what());
+                } catch(const std::bad_alloc& e) {
+                    return create_index_allocation_error(
+                            ctx.username, body["index_name"].s(), req.url, e.what());
                 } catch(const std::exception& e) {
                     return json_error_500(
                             ctx.username, body["index_name"].s(), req.url, std::string("Error: ") + e.what());
