@@ -49,3 +49,19 @@ user namespace; callers may also pass a fully-qualified `user/index` name.
 
 The Android JNI target disables server backup/tar APIs and builds only the
 embedded vector storage/search path needed by mobile clients.
+
+## Ubuntu build dependency helper
+
+For Cursor/Ubuntu build machines, install the required host packages and Android
+NDK with:
+
+```bash
+android/scripts/install-android-build-deps-ubuntu.sh
+export ANDROID_NDK_HOME=/usr/lib/android-sdk/ndk/26.2.11394342
+```
+
+This installs the host C++ standard library package required by Clang
+(`libstdc++-14-dev`) plus Android NDK r26c. The package files themselves are not
+vendored into this repository; the script records the reproducible setup needed
+to build `libendee.so`.
+
