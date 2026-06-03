@@ -16,3 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "endee-android"
 include(":library")
+include(":app")
+
