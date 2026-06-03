@@ -212,6 +212,10 @@ public final class EndeeExample {
 
 Search and info methods return **JSON strings** — parse with `org.json`, Moshi, Gson, or kotlinx.serialization.
 
+The `maxElements` argument to `createIndex` is the capacity for that index. Android builds use
+small on-device MDBX map defaults, so creating a small index (for example `maxElements = 100`) does
+not reserve server-scale storage maps.
+
 ---
 
 ## 6. Requirements

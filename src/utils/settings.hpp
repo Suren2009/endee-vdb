@@ -42,6 +42,28 @@ namespace settings {
     constexpr size_t DEFAULT_NUM_SERVER_THREADS = 0;
 
     // MDBX default map sizes. Growth step and initial size are the same for all databases.
+    //
+    // Android apps have much tighter per-process memory limits than the server. Keep their
+    // initial mmap sizes small so creating a tiny on-device index does not reserve server-scale
+    // address space before any vectors are inserted.
+#if defined(__ANDROID__)
+    // System tables
+    constexpr size_t DEFAULT_INDEX_META_MAP_SIZE_BITS = 20;      // 1 MiB
+    constexpr size_t DEFAULT_INDEX_META_MAP_SIZE_MAX_BITS = 24;  // 16 MiB
+    // Index-related tables
+    constexpr size_t DEFAULT_ID_MAPPER_MAP_SIZE_BITS = 20;      // 1 MiB
+    constexpr size_t DEFAULT_ID_MAPPER_MAP_SIZE_MAX_BITS = 26;  // 64 MiB
+    constexpr size_t DEFAULT_FILTER_MAP_SIZE_BITS = 20;         // 1 MiB
+    constexpr size_t DEFAULT_FILTER_MAP_SIZE_MAX_BITS = 26;     // 64 MiB
+    constexpr size_t DEFAULT_METADATA_MAP_SIZE_BITS = 20;       // 1 MiB
+    constexpr size_t DEFAULT_METADATA_MAP_SIZE_MAX_BITS = 26;   // 64 MiB
+    constexpr size_t DEFAULT_VECTOR_MAP_SIZE_BITS = 22;         // 4 MiB
+    constexpr size_t DEFAULT_VECTOR_MAP_SIZE_MAX_BITS = 28;     // 256 MiB
+    // Sparse storage
+    constexpr size_t DEFAULT_SPARSE_MAP_SIZE_MAX_BITS = 28;     // 256 MiB
+
+    constexpr size_t MAX_LINK_LIST_LOCKS = 4096;
+#else
     // System tables
     constexpr size_t DEFAULT_INDEX_META_MAP_SIZE_BITS = 21;      // 2 MiB
     constexpr size_t DEFAULT_INDEX_META_MAP_SIZE_MAX_BITS = 27;  // 128 MiB
@@ -55,9 +77,10 @@ namespace settings {
     constexpr size_t DEFAULT_VECTOR_MAP_SIZE_BITS = 30;         // 1 GiB
     constexpr size_t DEFAULT_VECTOR_MAP_SIZE_MAX_BITS = 40;     // 1 TiB
     // Sparse storage
-    constexpr size_t DEFAULT_SPARSE_MAP_SIZE_MAX_BITS = 40;    // 1 TiB
+    constexpr size_t DEFAULT_SPARSE_MAP_SIZE_MAX_BITS = 40;     // 1 TiB
 
     constexpr size_t MAX_LINK_LIST_LOCKS = 65536;
+#endif
 
     // Sparse Index settings
     /*XXX: Should we make this a runtime configurable value ?*/
@@ -112,8 +135,13 @@ namespace settings {
     constexpr size_t DEFAULT_MAX_ELEMENTS = 100'000;
     constexpr size_t DEFAULT_MAX_ELEMENTS_INCREMENT = 100'000;
     constexpr size_t DEFAULT_MAX_ELEMENTS_INCREMENT_TRIGGER = 50'000;
+#if defined(__ANDROID__)
+    constexpr size_t DEFAULT_VECTOR_CACHE_PERCENTAGE = 0;
+    constexpr size_t DEFAULT_VECTOR_CACHE_MIN_BITS = 0;
+#else
     constexpr size_t DEFAULT_VECTOR_CACHE_PERCENTAGE = 50;
     constexpr size_t DEFAULT_VECTOR_CACHE_MIN_BITS = 17; // Minimum 128K entries in cache
+#endif
     const std::string DEFAULT_SERVER_ID = "unknown";
 
     //For Backups
