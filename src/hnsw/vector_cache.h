@@ -5,6 +5,7 @@
 #include <mutex>
 #include <atomic>
 #include <cstring>
+#include <algorithm>
 #include <limits>
 #include <cstdlib>
 #include <string>
@@ -15,20 +16,30 @@ class VectorCache {
 public:
 
     // Helper to calculate required cache bits based on element count and percentage
-    static size_t calculateCacheBits(size_t element_count, size_t cache_percent = settings::VECTOR_CACHE_PERCENTAGE) {
-        if (element_count == 0 || cache_percent == 0) return 0;
-        
-        size_t target_elements = (element_count * cache_percent) / 100;
-        
-        // Calculate bits needed: 2^bits >= target_elements
-        size_t cache_bits = 0;
-        while ((1ULL << cache_bits) < target_elements) {
-            cache_bits++;
+    static size_t calculateCacheBits(size_t element_count,
+                                     size_t cache_percent = settings::VECTOR_CACHE_PERCENTAGE) {
+        if(element_count == 0 || cache_percent == 0) return 0;
+
+        const size_t bounded_percent = std::min<size_t>(cache_percent, 100);
+        size_t target_elements = (element_count / 100) * bounded_percent;
+        const size_t remainder = element_count % 100;
+        if(remainder > 0) {
+            target_elements += ((remainder * bounded_percent) + 99) / 100;
         }
-        
-        // Enforce minimum bits
-        if (cache_bits < settings::VECTOR_CACHE_MIN_BITS) {
-            cache_bits = settings::VECTOR_CACHE_MIN_BITS;
+        target_elements = std::max<size_t>(target_elements, 1);
+
+        const size_t max_shift = std::numeric_limits<size_t>::digits - 1;
+        if(settings::VECTOR_CACHE_MIN_BITS <= max_shift) {
+            const size_t min_cache_slots = size_t{1} << settings::VECTOR_CACHE_MIN_BITS;
+            if(element_count >= min_cache_slots && target_elements < min_cache_slots) {
+                target_elements = min_cache_slots;
+            }
+        }
+
+        // Calculate bits needed: 2^bits >= target_elements, without overflowing the shift.
+        size_t cache_bits = 0;
+        while(cache_bits < max_shift && (size_t{1} << cache_bits) < target_elements) {
+            cache_bits++;
         }
 
         return cache_bits;
@@ -90,7 +101,7 @@ public:
 
         data_size_ = data_size;
         cacheBits_ = cache_bits;
-        cacheSize_ = 1 << cacheBits_;
+        cacheSize_ = size_t{1} << cacheBits_;
         cacheMask_ = cacheSize_ - 1;
         vectorCacheDataSize_ = data_size_ + sizeof(idInt);
         
